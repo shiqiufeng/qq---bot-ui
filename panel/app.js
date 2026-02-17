@@ -6,7 +6,6 @@ let logFilterAccountId = localStorage.getItem('logFilterAccountId') || 'all';
 let lastServerUptime = 0;
 let lastSyncTimestamp = 0;
 let expHistory = [];
-let expChart = null;
 let adminToken = localStorage.getItem('adminToken') || '';
 let isLoggedIn = false;
 let pollTimer = null;
@@ -17,6 +16,7 @@ const pendingAutomationKeys = new Set();
 let latestConfigRevision = 0;
 let expectedConfigRevision = 0;
 let lastLogsRenderKey = '';
+let lastAccountLogsRenderKey = '';
 let lastStatusPolledAt = 0;
 let lastOperationsData = {};
 const logFilters = {
@@ -24,6 +24,8 @@ const logFilters = {
     event: localStorage.getItem('logFilterEvent') || '',
     keyword: localStorage.getItem('logFilterKeyword') || '',
     isWarn: localStorage.getItem('logFilterIsWarn') || '',
+    timeFrom: localStorage.getItem('logFilterTimeFrom') || '',
+    timeTo: localStorage.getItem('logFilterTimeTo') || '',
 };
 const THEME_STORAGE_KEY = 'themeMode';
 
@@ -70,34 +72,6 @@ function shouldHideLogEntry(entry) {
     if (msg.includes('获得物品')) return true;
     if (/金币\s*[+-]/.test(msg)) return true;
     return false;
-}
-
-function showExpChart(e) {
-    e.preventDefault();
-    const modal = document.getElementById('modal-chart');
-    modal.classList.add('show');
-    
-    const ctx = document.getElementById('expChart').getContext('2d');
-    if (expChart) expChart.destroy();
-    
-    expChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: expHistory.map(h => h.time),
-            datasets: [{
-                label: '累计获得经验',
-                data: expHistory.map(h => h.exp),
-                borderColor: '#2196F3',
-                tension: 0.1
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                y: { beginAtZero: true }
-            }
-        }
-    });
 }
 
 const $ = id => document.getElementById(id);
@@ -174,6 +148,30 @@ function lockHorizontalSwipeOnMobile() {
     }, { passive: false });
 }
 
+function applyFontScale() {
+    const root = document.documentElement;
+    const isDesktop = window.matchMedia('(min-width: 981px)').matches;
+    if (!isDesktop) {
+        root.style.setProperty('--font-scale', '1');
+        return;
+    }
+    const w = Math.max(window.innerWidth || 1, 1);
+    const h = Math.max(window.innerHeight || 1, 1);
+    const wr = w / 2560;
+    const hr = h / 1440;
+    // 宽高联合计算（2K 为基准 1.0）：提高“高”的影响，减轻“宽”的影响
+    let scale = Math.pow(wr, 0.35) * Math.pow(hr, 0.65);
+    // 对超宽/超高比例做轻微抑制，避免字体异常放大/缩小
+    const aspect = w / h;
+    const baseAspect = 16 / 9;
+    const aspectDelta = Math.abs(Math.log(aspect / baseAspect));
+    const aspectFactor = Math.max(0.96, 1 - aspectDelta * 0.04);
+    scale *= aspectFactor;
+    scale = Math.max(0.66, Math.min(1.45, scale));
+    root.style.setProperty('--font-scale', scale.toFixed(3));
+}
+
+
 function updateValueWithAnim(id, newValue, className = 'value-changed') {
     const el = $(id);
     if (!el) return;
@@ -197,6 +195,18 @@ function renderOpsList(opsRaw) {
     const fixedShow = ['harvest', 'steal', 'water', 'weed', 'bug', 'plant', 'sell'];
     const list = fixedShow.map((k) => [k, Number(ops[k] || 0)]);
     wrap.innerHTML = list.map(([k,v]) => `<div class="op-stat"><span class="label">${labels[k]||k}</span><span class="count">${v}</span></div>`).join('');
+    syncOpsRowsMode();
+}
+
+function syncOpsRowsMode() {
+    const wrap = $('ops-list');
+    if (!wrap) return;
+    // 先按内容占位测量，再决定是否切换为等分行高
+    wrap.classList.remove('equal-rows');
+    requestAnimationFrame(() => {
+        const needScroll = wrap.scrollHeight > wrap.clientHeight + 1;
+        if (!needScroll) wrap.classList.add('equal-rows');
+    });
 }
 
 function resetDashboardStats() {
@@ -259,11 +269,15 @@ function initLogFiltersUI() {
     const eventEl = $('logs-event-filter');
     const keywordEl = $('logs-keyword-filter');
     const warnEl = $('logs-warn-filter');
+    const timeFromEl = $('logs-time-from-filter');
+    const timeToEl = $('logs-time-to-filter');
 
     if (moduleEl) moduleEl.value = logFilters.module;
     if (eventEl) eventEl.value = logFilters.event;
     if (keywordEl) keywordEl.value = logFilters.keyword;
     if (warnEl) warnEl.value = logFilters.isWarn;
+    if (timeFromEl) timeFromEl.value = logFilters.timeFrom;
+    if (timeToEl) timeToEl.value = logFilters.timeTo;
 }
 
 function buildLogQuery() {
@@ -274,6 +288,8 @@ function buildLogQuery() {
     if (logFilters.event) p.set('event', logFilters.event);
     if (logFilters.keyword) p.set('keyword', logFilters.keyword);
     if (logFilters.isWarn !== '') p.set('isWarn', logFilters.isWarn);
+    if (logFilters.timeFrom) p.set('timeFrom', logFilters.timeFrom);
+    if (logFilters.timeTo) p.set('timeTo', logFilters.timeTo);
     return p.toString();
 }
 
@@ -724,15 +740,13 @@ async function pollLogs() {
     wrap.innerHTML = normalized.slice().reverse().map(l => {
         const name = l.accountName ? `【${l.accountName}】` : '';
         const timeStr = ((l.time || '').split(' ')[1] || (l.time || ''));
-        const moduleKey = (l.meta && l.meta.module) ? String(l.meta.module) : '';
         const eventKey = (l.meta && l.meta.event) ? String(l.meta.event) : '';
-        const mod = moduleKey ? `(${LOG_MODULE_LABELS[moduleKey] || moduleKey})` : '';
         const eventLabel = LOG_EVENT_LABELS[eventKey] || '';
         const ev = eventLabel ? `[${eventLabel}]` : '';
         return `<div class="log-row ${l.isWarn?'warn':''}">
             <span class="log-time">${escapeHtml(timeStr)}</span>
             <span class="log-tag">[${escapeHtml(l.tag || '系统')}]</span>
-            <span class="log-msg">${escapeHtml(`${name}${ev}${mod} ${l.msg}`)}</span>
+            <span class="log-msg">${escapeHtml(`${name}${ev} ${l.msg}`)}</span>
         </div>`;
     }).join('');
 }
@@ -1207,15 +1221,15 @@ async function loadAnalytics() {
     
     // 表格头
     let html = `
-    <table style="width:100%;border-collapse:collapse;font-size:16px;color:var(--text-main)">
+    <table style="width:100%;border-collapse:collapse;color:var(--text-main)">
         <thead>
             <tr style="border-bottom:1px solid var(--border);text-align:left;color:var(--text-sub)">
-                <th style="padding:12px 10px">作物 (Lv)</th>
-                <th style="padding:12px 10px">时间</th>
-                <th style="padding:12px 10px">经验/时</th>
-                <th style="padding:12px 10px">普通肥经验/时</th>
-                <th style="padding:12px 10px">净利润/时</th>
-                <th style="padding:12px 10px">普通肥净利润/时</th>
+                <th>作物 (Lv)</th>
+                <th>时间</th>
+                <th>经验/时</th>
+                <th>普通肥经验/时</th>
+                <th>净利润/时</th>
+                <th>普通肥净利润/时</th>
             </tr>
         </thead>
         <tbody>
@@ -1227,15 +1241,15 @@ async function loadAnalytics() {
             : String(item.level);
         html += `
             <tr style="border-bottom:1px solid var(--border);">
-                <td style="padding:12px 10px">
+                <td>
                     <div>${item.name}</div>
                     <div style="font-size:13px;color:var(--text-sub)">Lv${lvText}</div>
                 </td>
-                <td style="padding:12px 10px">${item.growTimeStr}</td>
-                <td style="padding:12px 10px;font-weight:bold;color:var(--accent)">${item.expPerHour}</td>
-                <td style="padding:12px 10px;font-weight:bold;color:var(--primary)">${item.normalFertilizerExpPerHour ?? '-'}</td>
-                <td style="padding:12px 10px;font-weight:bold;color:#f0b84f">${item.profitPerHour ?? '-'}</td>
-                <td style="padding:12px 10px;font-weight:bold;color:#74d39a">${item.normalFertilizerProfitPerHour ?? '-'}</td>
+                <td>${item.growTimeStr}</td>
+                <td style="font-weight:bold;color:var(--accent)">${item.expPerHour}</td>
+                <td style="font-weight:bold;color:var(--primary)">${item.normalFertilizerExpPerHour ?? '-'}</td>
+                <td style="font-weight:bold;color:#f0b84f">${item.profitPerHour ?? '-'}</td>
+                <td style="font-weight:bold;color:#74d39a">${item.normalFertilizerProfitPerHour ?? '-'}</td>
             </tr>
         `;
     });
@@ -1263,13 +1277,13 @@ function renderAccountManager() {
     wrap.innerHTML = accounts.map(a => `
         <div class="acc-item">
             <div class="name">${a.name}</div>
-            <div style="margin-top:10px;display:flex;gap:10px;justify-content:flex-end">
+            <div class="acc-actions">
                 ${a.running 
-                    ? `<button class="btn" style="font-size:12px;padding:5px 10px;background:#FF9800;color:#fff" onclick="stopAccount('${a.id}')">停止</button>`
-                    : `<button class="btn btn-primary" style="font-size:12px;padding:5px 10px" onclick="startAccount('${a.id}')">启动</button>`
+                    ? `<button class="btn acc-btn acc-btn-stop" onclick="stopAccount('${a.id}')">停止</button>`
+                    : `<button class="btn btn-primary acc-btn" onclick="startAccount('${a.id}')">启动</button>`
                 }
-                <button class="btn btn-primary" style="font-size:12px;padding:5px 10px" onclick="editAccount('${a.id}')">编辑</button>
-                <button class="btn" style="font-size:12px;padding:5px 10px;color:#F44336" onclick="deleteAccount('${a.id}')">删除</button>
+                <button class="btn btn-primary acc-btn" onclick="editAccount('${a.id}')">编辑</button>
+                <button class="btn acc-btn acc-btn-danger" onclick="deleteAccount('${a.id}')">删除</button>
             </div>
         </div>
     `).join('');
@@ -1279,11 +1293,16 @@ async function pollAccountLogs() {
     const wrap = $('account-logs-list');
     if (!wrap) return;
     const list = await api('/api/account-logs?limit=100');
-    if (!list || !list.length) {
+    const normalized = Array.isArray(list) ? list : [];
+    if (!normalized.length) {
+        lastAccountLogsRenderKey = '';
         wrap.innerHTML = '<div class="log-row">暂无账号日志</div>';
         return;
     }
-    wrap.innerHTML = list.slice().reverse().map(l => {
+    const renderKey = JSON.stringify(normalized.map(l => [l.time, l.action, l.msg, l.reason || '']));
+    if (renderKey === lastAccountLogsRenderKey) return;
+    lastAccountLogsRenderKey = renderKey;
+    wrap.innerHTML = normalized.slice().reverse().map(l => {
         const actionMap = {
             add: '添加',
             update: '更新',
@@ -1291,9 +1310,10 @@ async function pollAccountLogs() {
             kickout_delete: '踢下线删除',
         };
         const action = actionMap[l.action] || l.action || '操作';
+        const timeStr = ((l.time || '').split(' ')[1] || (l.time || ''));
         const reason = l.reason ? ` (原因: ${escapeHtml(String(l.reason))})` : '';
         return `<div class="log-row">
-            <span class="log-time">${(l.time || '').split(' ')[1] || ''}</span>
+            <span class="log-time">${escapeHtml(timeStr)}</span>
             <span class="log-tag">[${action}]</span>
             <span class="log-msg">${escapeHtml(l.msg || '')}${reason}</span>
         </div>`;
@@ -1316,7 +1336,6 @@ window.stopAccount = async (id) => {
 
 // 模态框逻辑
 const modal = $('modal-add-acc');
-const chartModal = $('modal-chart');
 let editingAccountId = null;
 
 // QR 登录相关变量
@@ -1494,15 +1513,6 @@ function stopQRCheck() {
     }
 }
 
-// 图表关闭逻辑
-if (chartModal) {
-    chartModal.querySelector('.close-modal').addEventListener('click', () => chartModal.classList.remove('show'));
-    // 点击背景关闭
-    chartModal.addEventListener('click', (e) => {
-        if (e.target === chartModal) chartModal.classList.remove('show');
-    });
-}
-
 $('btn-add-acc-modal').addEventListener('click', () => {
     editingAccountId = null;
     $('acc-name').value = '';
@@ -1645,6 +1655,9 @@ setInterval(() => {
 }, 1000);
 updateTime();
 lockHorizontalSwipeOnMobile();
+applyFontScale();
+window.addEventListener('resize', applyFontScale);
+window.addEventListener('resize', syncOpsRowsMode);
 updateTopbarAccount(null);
 initTheme();
 
@@ -1724,6 +1737,26 @@ if (logsKeywordInput) {
     };
     logsKeywordInput.addEventListener('input', onKeywordChange);
     logsKeywordInput.addEventListener('change', onKeywordChange);
+}
+
+const logsTimeFromInput = $('logs-time-from-filter');
+if (logsTimeFromInput) {
+    logsTimeFromInput.value = logFilters.timeFrom;
+    logsTimeFromInput.addEventListener('change', () => {
+        logFilters.timeFrom = logsTimeFromInput.value || '';
+        localStorage.setItem('logFilterTimeFrom', logFilters.timeFrom);
+        pollLogs();
+    });
+}
+
+const logsTimeToInput = $('logs-time-to-filter');
+if (logsTimeToInput) {
+    logsTimeToInput.value = logFilters.timeTo;
+    logsTimeToInput.addEventListener('change', () => {
+        logFilters.timeTo = logsTimeToInput.value || '';
+        localStorage.setItem('logFilterTimeTo', logFilters.timeTo);
+        pollLogs();
+    });
 }
 
 initLogFiltersUI();

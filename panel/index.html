@@ -4,9 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>QQ农场智能助手</title>
-  <link rel="stylesheet" href="style.css?v=2026021602">
+  <link rel="stylesheet" href="style.css?v=2026021781">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <div id="login-overlay" class="login-overlay">
@@ -127,6 +126,8 @@
                     <option value="unlock_land">土地解锁</option>
                   </select>
                   <select id="logs-warn-filter" class="form-control log-filter-select"><option value="">级别</option><option value="0">普通</option><option value="1">警告</option></select>
+                  <input id="logs-time-from-filter" class="form-control log-filter-input" type="datetime-local" title="开始时间">
+                  <input id="logs-time-to-filter" class="form-control log-filter-input" type="datetime-local" title="结束时间">
                   <input id="logs-keyword-filter" class="form-control log-filter-input" type="text" placeholder="关键词（空格分词）">
                 </div>
               </div>
@@ -139,27 +140,31 @@
                 <div class="ops-list" id="ops-list"></div>
               </div>
 
-              <div class="card" id="card-efficiency" oncontextmenu="showExpChart(event)">
+              <div class="card" id="card-efficiency">
                 <div class="card-head"><h3><i class="fas fa-toggle-on"></i> 自动控制</h3></div>
                 <div class="switches-list">
-                  <label class="switch-item"><span>自动种植/收获</span><input type="checkbox" id="auto-farm"><span class="slider"></span></label>
-                  <label class="switch-item"><span>推送触发巡田</span><input type="checkbox" id="auto-farm-push"><span class="slider"></span></label>
-                  <label class="switch-item"><span>自动升级土地</span><input type="checkbox" id="auto-land-upgrade"><span class="slider"></span></label>
-                  <label class="switch-item"><span>自动好友互动</span><input type="checkbox" id="auto-friend"><span class="slider"></span></label>
-
-                  <div id="friend-sub-controls" class="friend-sub-controls">
-                    <label class="switch-item"><span>自动偷菜</span><input type="checkbox" id="auto-friend-steal"><span class="slider"></span></label>
-                    <label class="switch-item"><span>自动帮忙</span><input type="checkbox" id="auto-friend-help"><span class="slider"></span></label>
-                    <label class="switch-item"><span>自动捣乱</span><input type="checkbox" id="auto-friend-bad"><span class="slider"></span></label>
+                  <div class="switch-inline-row">
+                    <label class="switch-item switch-inline-item"><span class="switch-inline-label">自动种植收获</span><input type="checkbox" id="auto-farm"><span class="slider"></span></label>
+                    <label class="switch-item switch-inline-item"><span class="switch-inline-label">自动做任务</span><input type="checkbox" id="auto-task"><span class="slider"></span></label>
+                    <label class="switch-item switch-inline-item"><span class="switch-inline-label">自动卖果实</span><input type="checkbox" id="auto-sell"><span class="slider"></span></label>
                   </div>
 
-                  <label class="switch-item"><span>自动做任务</span><input type="checkbox" id="auto-task"><span class="slider"></span></label>
-                  <label class="switch-item"><span>自动卖果实</span><input type="checkbox" id="auto-sell"><span class="slider"></span></label>
+                  <div class="switch-inline-row">
+                    <label class="switch-item switch-inline-item"><span class="switch-inline-label">自动好友互动</span><input type="checkbox" id="auto-friend"><span class="slider"></span></label>
+                    <label class="switch-item switch-inline-item"><span class="switch-inline-label">推送触发巡田</span><input type="checkbox" id="auto-farm-push"><span class="slider"></span></label>
+                    <label class="switch-item switch-inline-item"><span class="switch-inline-label">自动升级土地</span><input type="checkbox" id="auto-land-upgrade"><span class="slider"></span></label>
+                  </div>
+
+                  <div id="friend-sub-controls" class="friend-sub-controls">
+                    <label class="switch-item friend-sub-item"><span class="friend-sub-label">自动偷菜</span><input type="checkbox" id="auto-friend-steal"><span class="slider"></span></label>
+                    <label class="switch-item friend-sub-item"><span class="friend-sub-label">自动帮忙</span><input type="checkbox" id="auto-friend-help"><span class="slider"></span></label>
+                    <label class="switch-item friend-sub-item"><span class="friend-sub-label">自动捣乱</span><input type="checkbox" id="auto-friend-bad"><span class="slider"></span></label>
+                  </div>
 
                   <div class="form-group compact">
                     <label>施肥策略</label>
                     <select id="fertilizer-select" class="form-control">
-                      <option value="both">普通 + 有机 (推荐)</option>
+                      <option value="both">普通 + 有机</option>
                       <option value="normal">仅普通化肥</option>
                       <option value="organic">仅有机化肥</option>
                       <option value="none">不施肥</option>
@@ -276,13 +281,6 @@
     </div>
   </div>
 
-  <div class="modal" id="modal-chart">
-    <div class="modal-content chart-modal">
-      <div class="modal-header"><h3>经验获取趋势</h3><span class="close-modal">&times;</span></div>
-      <div class="modal-body"><canvas id="expChart"></canvas></div>
-    </div>
-  </div>
-
-<script src="app.js?v=2026021602"></script>
+  <script src="app.js?v=2026021770"></script>
 </body>
 </html>

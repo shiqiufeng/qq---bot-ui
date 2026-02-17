@@ -384,6 +384,8 @@ function startAdminServer(dataProvider) {
             event: req.query.event || '',
             keyword: req.query.keyword || '',
             isWarn: req.query.isWarn,
+            timeFrom: req.query.timeFrom || '',
+            timeTo: req.query.timeTo || '',
         };
         const list = provider.getLogs(id, options);
         res.json({ ok: true, data: list });

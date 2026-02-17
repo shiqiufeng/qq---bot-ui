@@ -118,7 +118,12 @@ function filterLogs(list, filters = {}) {
     const moduleName = String(f.module || '').trim();
     const eventName = String(f.event || '').trim();
     const isWarn = f.isWarn;
+    const timeFromMs = f.timeFrom ? Date.parse(String(f.timeFrom)) : NaN;
+    const timeToMs = f.timeTo ? Date.parse(String(f.timeTo)) : NaN;
     return (list || []).filter((l) => {
+        const logMs = Number(l && l.ts) || Date.parse(String((l && l.time) || ''));
+        if (Number.isFinite(timeFromMs) && Number.isFinite(logMs) && logMs < timeFromMs) return false;
+        if (Number.isFinite(timeToMs) && Number.isFinite(logMs) && logMs > timeToMs) return false;
         if (tag && String(l.tag || '') !== tag) return false;
         if (moduleName && String((l.meta || {}).module || '') !== moduleName) return false;
         if (eventName && String((l.meta || {}).event || '') !== eventName) return false;
@@ -236,6 +241,7 @@ function handleWorkerMessage(accountId, msg) {
             ...msg.data,
             accountId,
             accountName: worker.name,
+            ts: Date.now(),
             meta: msg.data && msg.data.meta ? msg.data.meta : {},
         };
         logEntry._searchText = `${logEntry.msg || ''} ${logEntry.tag || ''} ${JSON.stringify(logEntry.meta || {})}`.toLowerCase();
