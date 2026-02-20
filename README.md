@@ -120,15 +120,15 @@ npm run build:release
 构建产物输出在 `dist/` 目录。
 
 ### 产物说明
-- Windows: `dist/farm-win.exe`
-- Linux: `dist/farm-linux`
+- Windows: `dist/farm-win-x64.exe`
+- Linux: `dist/farm-linux-x64`
 - macOS Intel: `dist/farm-macos-x64`
 - macOS Apple Silicon: `dist/farm-macos-arm64`
 
 ### 用户运行方式（无需 Node.js）
 
-- Windows: 双击 exe 或在终端运行 `.\farm-win.exe`
-- Linux: `chmod +x ./farm-linux && ./farm-linux`
+- Windows: 双击 exe 或在终端运行 `.\farm-win-x64.exe`
+- Linux: `chmod +x ./farm-linux-x64 && ./farm-linux-x64`
 - macOS: `chmod +x ./farm-macos-arm64 && ./farm-macos-arm64`（或 x64 版本）
 
 程序会在可执行文件同级目录自动创建 `data/` 并写入配置与账号数据：
@@ -138,6 +138,7 @@ npm run build:release
 ## 登录与安全
 - 面板首次访问需要登录
 - 默认管理密码：`admin`
+- 建议设置强密码后访问面板
 
 ## 目录结构
 

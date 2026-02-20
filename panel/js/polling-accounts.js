@@ -1,4 +1,5 @@
 const CURRENT_ACCOUNT_STORAGE_KEY = 'currentAccountId';
+const wsErrorNotifiedAt = {};
 
 async function loadAccounts() {
     return runDedupedRequest('loadAccounts', async () => {
@@ -269,6 +270,19 @@ async function pollStatus(options = {}) {
     }
     $('conn-text').textContent = isConnected ? '运行中' : '未连接';
     $('conn-dot').className = 'dot ' + (isConnected ? 'online' : 'offline');
+
+    const wsError = data.wsError || null;
+    if (wsError && Number(wsError.code) === 400 && currentAccountId) {
+        const errAt = Number(wsError.at) || 0;
+        const lastNotified = Number(wsErrorNotifiedAt[currentAccountId] || 0);
+        if (errAt && errAt > lastNotified) {
+            wsErrorNotifiedAt[currentAccountId] = errAt;
+            if (typeof refreshAccountCode === 'function') {
+                refreshAccountCode(currentAccountId);
+            }
+            alert('检测到登录失效 (WS 400)，已弹出更新二维码，请扫码更新 Code');
+        }
+    }
 
     // Stats
     $('level').textContent = data.status?.level ? 'Lv' + data.status.level : '-';

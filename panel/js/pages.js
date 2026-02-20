@@ -765,6 +765,7 @@ function renderAccountManager() {
                     ? `<button class="btn acc-btn acc-btn-stop" onclick="stopAccount('${a.id}')">停止</button>`
                     : `<button class="btn btn-primary acc-btn" onclick="startAccount('${a.id}')">启动</button>`
                 }
+                <button class="btn btn-primary acc-btn" onclick="refreshAccountCode('${a.id}')">更新Code</button>
                 <button class="btn btn-primary acc-btn" onclick="editAccount('${a.id}')">编辑</button>
                 <button class="btn acc-btn acc-btn-danger" onclick="deleteAccount('${a.id}')">删除</button>
             </div>
@@ -792,6 +793,7 @@ async function pollAccountLogs() {
                 update: '更新',
                 delete: '删除',
                 kickout_delete: '踢下线删除',
+                ws_400: '登录失效',
             };
             const action = actionMap[l.action] || l.action || '操作';
             const timeStr = ((l.time || '').split(' ')[1] || (l.time || ''));

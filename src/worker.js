@@ -58,6 +58,9 @@ let lastStatusSentAt = 0;
 let onSellGain = null;
 let onFarmHarvested = null;
 let harvestSellRunning = false;
+let lastLoginCode = '';
+let onWsError = null;
+let wsErrorHandledAt = 0;
 
 function normalizeIntervalRangeSec(minSec, maxSec, fallbackSec) {
     const fallback = Math.max(1, parseInt(fallbackSec, 10) || 1);
@@ -226,6 +229,7 @@ async function startBot(config) {
     isRunning = true;
 
     const { code, platform, farmInterval, friendInterval } = config;
+    lastLoginCode = String(code || '');
 
     CONFIG.platform = platform || 'qq';
     if (farmInterval) {
@@ -248,6 +252,32 @@ async function startBot(config) {
 
     initStatusBar();
     setStatusPlatform(CONFIG.platform);
+
+    if (onWsError) {
+        networkEvents.off('ws_error', onWsError);
+        onWsError = null;
+    }
+    onWsError = (payload) => {
+        const statusCode = Number(payload && payload.code) || 0;
+        if (statusCode !== 400) return;
+        const now = Date.now();
+        if (now - wsErrorHandledAt < 4000) return;
+        wsErrorHandledAt = now;
+        log('系统', '连接被拒绝，可能需要更新 Code');
+        if (process.send) {
+            process.send({
+                type: 'ws_error',
+                code: statusCode,
+                message: (payload && payload.message) || '',
+            });
+        }
+        if (isRunning) {
+            setTimeout(() => {
+                if (isRunning) reconnect(lastLoginCode);
+            }, 1000);
+        }
+    };
+    networkEvents.on('ws_error', onWsError);
 
     networkEvents.on('kickout', onKickout);
 
@@ -327,6 +357,10 @@ async function stopBot() {
     loginReady = false;
     stopUnifiedScheduler();
     networkEvents.off('kickout', onKickout);
+    if (onWsError) {
+        networkEvents.off('ws_error', onWsError);
+        onWsError = null;
+    }
     if (onSellGain) {
         networkEvents.off('sell', onSellGain);
         onSellGain = null;

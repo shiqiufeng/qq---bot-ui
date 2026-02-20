@@ -124,6 +124,7 @@ function buildDefaultStatus(accountId) {
         lastExpGain: 0,
         lastGoldGain: 0,
         limits: {},
+        wsError: null,
         automation: store.getAutomation(accountId),
         preferredSeed: store.getPreferredSeed(accountId),
         expProgress: { current: 0, needed: 0, level: 0 },
@@ -205,6 +206,7 @@ function startWorker(account) {
         stopping: false,
         disconnectedSince: 0,
         autoDeleteTriggered: false,
+        wsError: null,
     };
 
     // 发送启动指令
@@ -258,6 +260,7 @@ function handleWorkerMessage(accountId, msg) {
         if (connected) {
             worker.disconnectedSince = 0;
             worker.autoDeleteTriggered = false;
+            worker.wsError = null;
         } else if (!worker.stopping) {
             const now = Date.now();
             if (!worker.disconnectedSince) worker.disconnectedSince = now;
@@ -297,6 +300,19 @@ function handleWorkerMessage(accountId, msg) {
         if (GLOBAL_LOGS.length > 1000) GLOBAL_LOGS.shift();
     } else if (msg.type === 'error') {
         log('错误', `账号[${accountId}]进程报错: ${msg.error}`);
+    } else if (msg.type === 'ws_error') {
+        const code = Number(msg.code) || 0;
+        const message = msg.message || '';
+        worker.wsError = { code, message, at: Date.now() };
+        if (code === 400) {
+            addAccountLog(
+                'ws_400',
+                `账号 ${worker.name} 登录失效，请更新 Code`,
+                accountId,
+                worker.name,
+                { reason: message || 'Unexpected server response: 400' }
+            );
+        }
     } else if (msg.type === 'account_kicked') {
         const reason = msg.reason || '未知';
         log('系统', `账号 ${worker.name} 被踢下线，自动删除账号信息`);
@@ -350,6 +366,7 @@ const dataProvider = {
         return {
             ...buildDefaultStatus(accountId),
             ...normalizeStatusForPanel(w.status, accountId, w.name),
+            wsError: w.wsError || null,
         };
     },
     

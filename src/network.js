@@ -468,7 +468,15 @@ function connect(code, onLoginSuccess) {
     });
 
     ws.on('error', (err) => {
-        logWarn('系统', `[WS] 错误: ${err.message}`);
+        const message = err && err.message ? String(err.message) : '';
+        logWarn('系统', `[WS] 错误: ${message}`);
+        const match = message.match(/Unexpected server response:\s*(\d+)/i);
+        if (match) {
+            const code = parseInt(match[1], 10) || 0;
+            if (code) {
+                networkEvents.emit('ws_error', { code, message });
+            }
+        }
     });
 }
 

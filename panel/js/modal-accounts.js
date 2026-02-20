@@ -1,9 +1,12 @@
 let editingAccountId = null;
+let qrMode = 'add';
 
 // QR 登录相关变量
 let currentQRCode = '';
 let currentLoginUrl = '';
 let qrCheckInterval = null;
+let qrRequestSeq = 0;
+let activeQrRequest = 0;
 
 function isMobileByUA() {
     const ua = navigator.userAgent || '';
@@ -57,7 +60,23 @@ function switchTab(tabName) {
     }
 }
 
+function setQrMode(mode, acc) {
+    qrMode = mode || 'add';
+    const nameQr = $('acc-name-qr');
+    if (nameQr) {
+        if (qrMode === 'refresh' && acc) {
+            nameQr.value = acc.name || '';
+            nameQr.disabled = true;
+        } else {
+            nameQr.disabled = false;
+            if (qrMode === 'add') nameQr.value = '';
+        }
+    }
+}
+
 async function generateQRCode() {
+    const reqId = ++qrRequestSeq;
+    activeQrRequest = reqId;
     const btn = $('btn-qr-generate');
     if (btn) btn.disabled = true;
     const status = $('qr-status');
@@ -65,6 +84,9 @@ async function generateQRCode() {
         status.textContent = '正在生成二维码...';
         status.style.color = 'var(--sub)';
     }
+    stopQRCheck();
+    currentQRCode = '';
+    currentLoginUrl = '';
 
     try {
         const result = await fetch('/api/qr/create', {
@@ -72,6 +94,7 @@ async function generateQRCode() {
             headers: { 'Content-Type': 'application/json' }
         }).then(r => r.json());
 
+        if (reqId !== activeQrRequest) return;
         if (result.ok && result.data) {
             currentQRCode = result.data.code;
             currentLoginUrl = result.data.url || result.data.loginUrl || '';
@@ -89,9 +112,10 @@ async function generateQRCode() {
             alert('生成二维码失败: ' + (result.error || '未知错误'));
         }
     } catch (e) {
+        if (reqId !== activeQrRequest) return;
         alert('生成二维码出错: ' + e.message);
     } finally {
-        if (btn) btn.disabled = false;
+        if (reqId === activeQrRequest && btn) btn.disabled = false;
     }
 }
 
@@ -179,23 +203,32 @@ function startQRCheck() {
                         $('acc-code').value = loginCode;
                         
                         // 获取备注名，如果没输入就用默认名
+                        const acc = editingAccountId ? accounts.find(a => a.id === editingAccountId) : null;
                         let accName = $('acc-name-qr').value.trim();
                         if (!accName) {
-                            // 默认备注名使用 QQ 号（uin）
                             accName = result.data.uin ? String(result.data.uin) : '扫码账号';
                         }
-                        
-                        // 直接保存账号
+
                         try {
                             const qq = result.data.uin ? String(result.data.uin) : '';
-                            const payload = { 
-                                name: accName, 
-                                code: loginCode, 
+                            const payload = {
+                                name: accName,
+                                code: loginCode,
                                 platform: 'qq',
                                 uin: qq,
                                 qq,
                                 avatar: result.data.avatar || (qq ? `https://q1.qlogo.cn/g?b=qq&nk=${qq}&s=640` : '')
                             };
+                            if (qrMode === 'refresh' && editingAccountId && acc) {
+                                payload.id = editingAccountId;
+                                payload.name = acc.name || accName;
+                                payload.platform = acc.platform || 'qq';
+                                if (!qq) {
+                                    if (acc.uin) payload.uin = acc.uin;
+                                    if (acc.qq) payload.qq = acc.qq;
+                                }
+                                if (!payload.avatar) payload.avatar = acc.avatar || '';
+                            }
                             
                             const saveResult = await fetch('/api/accounts', {
                                 method: 'POST',
@@ -209,6 +242,7 @@ function startQRCheck() {
                                     modal.classList.remove('show');
                                     loadAccounts();
                                 }, 1000);
+                                qrMode = 'add';
                             } else {
                                 status.textContent = '✗ 保存失败: ' + (saveResult.error || '未知错误');
                                 status.style.color = '#F44336';
@@ -239,6 +273,7 @@ function stopQRCheck() {
 
 $('btn-add-acc-modal').addEventListener('click', () => {
     editingAccountId = null;
+    setQrMode('add');
     $('acc-name').value = '';
     $('acc-code').value = '';
     $('acc-name-qr').value = '';
@@ -280,6 +315,7 @@ window.editAccount = (id) => {
     const acc = accounts.find(a => a.id === id);
     if (!acc) return;
     editingAccountId = id;
+    setQrMode('add');
     $('acc-name').value = acc.name;
     $('acc-code').value = acc.code;
     $('acc-platform').value = acc.platform;
@@ -291,14 +327,32 @@ window.editAccount = (id) => {
     modal.classList.add('show');
 };
 
+window.refreshAccountCode = (id) => {
+    const acc = accounts.find(a => a.id === id);
+    if (!acc) return;
+    editingAccountId = id;
+    setQrMode('refresh', acc);
+    $('acc-code').value = '';
+    currentQRCode = '';
+    currentLoginUrl = '';
+    syncQrOpenButtonVisibility();
+    switchTab('qrcode');
+    stopQRCheck();
+    generateQRCode();
+    modal.querySelector('h3').textContent = '更新账号Code';
+    modal.classList.add('show');
+};
+
 document.querySelectorAll('.close-modal').forEach(btn => {
     btn.addEventListener('click', () => {
         stopQRCheck();
+        qrMode = 'add';
         modal.classList.remove('show');
     });
 });
 $('btn-cancel-acc').addEventListener('click', () => {
     stopQRCheck();
+    qrMode = 'add';
     modal.classList.remove('show');
 });
 
@@ -306,6 +360,7 @@ const btnCancelQR = $('btn-cancel-acc-qr');
 if (btnCancelQR) {
     btnCancelQR.addEventListener('click', () => {
         stopQRCheck();
+        qrMode = 'add';
         modal.classList.remove('show');
     });
 }
@@ -342,6 +397,7 @@ $('btn-save-acc').addEventListener('click', async () => {
     
     await api('/api/accounts', 'POST', payload);
     stopQRCheck();
+    qrMode = 'add';
     modal.classList.remove('show');
     loadAccounts();
     pollAccountLogs();
