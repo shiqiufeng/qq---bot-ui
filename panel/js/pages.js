@@ -529,6 +529,28 @@ const PUSHOO_CHANNELS = new Set([
     'pushdeer', 'igot', 'telegram', 'feishu', 'ifttt', 'wecombot',
     'discord', 'wxpusher',
 ]);
+// 文档链接映射（用于面板提示）
+const CHANNEL_DOCS = {
+    webhook: '',
+    qmsg: 'https://qmsg.zendee.cn/',
+    serverchan: 'https://sct.ftqq.com/',
+    pushplus: 'https://www.pushplus.plus/',
+    pushplushxtrip: 'https://pushplus.hxtrip.com/',
+    dingtalk: 'https://open.dingtalk.com/document/group/custom-robot-access',
+    wecom: 'https://guole.fun/posts/626/',
+    wecombot: 'https://developer.work.weixin.qq.com/document/path/91770',
+    bark: 'https://github.com/Finb/Bark',
+    gocqhttp: 'https://docs.go-cqhttp.org/api/',
+    onebot: 'https://docs.go-cqhttp.org/api/',
+    atri: 'https://blog.tianli0.top/',
+    pushdeer: 'https://www.pushdeer.com/',
+    igot: 'https://push.hellyw.com/',
+    telegram: 'https://core.telegram.org/bots',
+    feishu: 'https://www.feishu.cn/hc/zh-CN/articles/360024984973',
+    ifttt: 'https://ifttt.com/maker_webhooks',
+    discord: 'https://discord.com/developers/docs/resources/webhook#execute-webhook',
+    wxpusher: 'https://wxpusher.zjiecode.com/docs/#/',
+};
 function syncOfflineReminderChannelUI() {
     const channelEl = $('offline-reminder-channel');
     const endpointEl = $('offline-reminder-endpoint');
@@ -538,10 +560,29 @@ function syncOfflineReminderChannelUI() {
     endpointEl.disabled = !editable;
 }
 
+// 显示/隐藏渠道文档链接
+function syncOfflineReminderChannelDoc() {
+    const channelEl = $('offline-reminder-channel');
+    const docEl = $('offline-reminder-channel-doc');
+    if (!channelEl || !docEl) return;
+    const channel = String(channelEl.value || '').trim().toLowerCase();
+    const url = CHANNEL_DOCS[channel] || '';
+    if (url) {
+        docEl.href = url;
+        docEl.style.display = 'inline';
+        docEl.title = url;
+    } else {
+        docEl.style.display = 'none';
+        docEl.removeAttribute('href');
+        docEl.title = '';
+    }
+}
+
 const offlineReminderChannelEl = document.getElementById('offline-reminder-channel');
 if (offlineReminderChannelEl) {
-    offlineReminderChannelEl.addEventListener('change', syncOfflineReminderChannelUI);
+    offlineReminderChannelEl.addEventListener('change', () => { syncOfflineReminderChannelUI(); syncOfflineReminderChannelDoc(); });
     syncOfflineReminderChannelUI();
+    syncOfflineReminderChannelDoc();
 }
 if (saveOfflineReminderBtn) {
     saveOfflineReminderBtn.addEventListener('click', async () => {
@@ -640,6 +681,7 @@ async function loadSettings() {
             $('offline-reminder-endpoint').value = String(reminder.endpoint || '').trim();
         }
         syncOfflineReminderChannelUI();
+        syncOfflineReminderChannelDoc();
         if ($('offline-reminder-token')) $('offline-reminder-token').value = String(reminder.token || '');
         if ($('offline-reminder-title')) $('offline-reminder-title').value = String(reminder.title || '账号下线提醒');
         if ($('offline-reminder-msg')) $('offline-reminder-msg').value = String(reminder.msg || '账号下线');
